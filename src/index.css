@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0F1A1F;
+  --color-secondary: #1B2429;
+  --color-tertiary: #2A3A40;
+  --color-heading: #949E9C;
+  --color-sell: #E96E85;
+  --color-sell-100: #2F272E;
+  --color-buy: #60D995;
+  --color-buy-100: #102F2D;
+}
