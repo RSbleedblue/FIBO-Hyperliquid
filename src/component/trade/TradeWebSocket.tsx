@@ -2,8 +2,17 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import Dropdown from "../dropdown/dropdown";
 import * as hl from "@nktkas/hyperliquid";
 import Skeleton from "react-loading-skeleton";
-import type { TabType, OrderBook, TradeEntry } from "../../types/orderAndTrade_types";
-import { processL2BookData, processOrderBook, fillOrdersToFixedLength, calculateSpread } from "../../utils/orderBook";
+import type {
+  TabType,
+  OrderBook,
+  TradeEntry,
+} from "../../types/orderAndTrade_types";
+import {
+  processL2BookData,
+  processOrderBook,
+  fillOrdersToFixedLength,
+  calculateSpread,
+} from "../../utils/orderBook";
 import { processTradeData, formatTime } from "../../utils/trades";
 import { connectWebSocket } from "../../utils/websocket";
 
@@ -19,9 +28,15 @@ const CryptoExchange: React.FC = () => {
   const [grouping, setGrouping] = useState<number>(1);
   const [coin, setCoin] = useState<string>("BTC");
   const socketRef = useRef<WebSocket | null>(null);
-  const orderBookIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [highlightedAsks, setHighlightedAsks] = useState<Record<number, boolean>>({});
-  const [highlightedBids, setHighlightedBids] = useState<Record<number, boolean>>({});
+  const orderBookIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const [highlightedAsks, setHighlightedAsks] = useState<
+    Record<number, boolean>
+  >({});
+  const [highlightedBids, setHighlightedBids] = useState<
+    Record<number, boolean>
+  >({});
 
   const groupingOptions = [1, 10, 20, 50, 100, 1000, 10000];
   const coinOptions = ["BTC", "ETH", "SOL"];
@@ -34,33 +49,45 @@ const CryptoExchange: React.FC = () => {
     }
   };
 
-  const processedOrderBook = useMemo(() =>
-    processOrderBook(orderBook, NUM_ENTRIES),
+  const processedOrderBook = useMemo(
+    () => processOrderBook(orderBook, NUM_ENTRIES),
     [orderBook]
   );
 
   const filledBids = useMemo(
-    () => fillOrdersToFixedLength(processedOrderBook.bids, false, NUM_ENTRIES, grouping),
+    () =>
+      fillOrdersToFixedLength(
+        processedOrderBook.bids,
+        false,
+        NUM_ENTRIES,
+        grouping
+      ),
     [processedOrderBook.bids, grouping]
   );
 
   const filledAsks = useMemo(
-    () => fillOrdersToFixedLength(processedOrderBook.asks, true, NUM_ENTRIES, grouping),
+    () =>
+      fillOrdersToFixedLength(
+        processedOrderBook.asks,
+        true,
+        NUM_ENTRIES,
+        grouping
+      ),
     [processedOrderBook.asks, grouping]
   );
 
-  const maxAskSize = useMemo(() => {
-    const max = Math.max(...filledAsks.map(ask => ask.size));
-    return max > 0 ? max : 1;
+  const totalAskSize = useMemo(() => {
+    const total = filledAsks.reduce((acc, ask) => acc + ask.size, 0);
+    return total > 0 ? total : 1;
   }, [filledAsks]);
 
-  const maxBidSize = useMemo(() => {
-    const max = Math.max(...filledBids.map(bid => bid.size));
-    return max > 0 ? max : 1;
+  const totalBidSize = useMemo(() => {
+    const total = filledBids.reduce((acc, bid) => acc + bid.size, 0);
+    return total > 0 ? total : 1;
   }, [filledBids]);
 
-  const spread = useMemo(() =>
-    calculateSpread(filledAsks, filledBids),
+  const spread = useMemo(
+    () => calculateSpread(filledAsks, filledBids),
     [filledAsks, filledBids]
   );
 
@@ -77,6 +104,7 @@ const CryptoExchange: React.FC = () => {
   const fetchL2Book = async () => {
     try {
       const l2Book = await client.l2Book({ coin });
+
       const newOrderBook = processL2BookData(
         l2Book,
         grouping,
@@ -99,15 +127,16 @@ const CryptoExchange: React.FC = () => {
   useEffect(() => {
     const socket = connectWebSocket(
       coin,
-      (data) => processTradeData(
-        data,
-        grouping,
-        activeTab,
-        setTrades,
-        setOrderBook,
-        setHighlightedBids,
-        setHighlightedAsks
-      ),
+      (data) =>
+        processTradeData(
+          data,
+          grouping,
+          activeTab,
+          setTrades,
+          setOrderBook,
+          setHighlightedBids,
+          setHighlightedAsks
+        ),
       setError,
       setIsConnected
     );
@@ -192,14 +221,16 @@ const CryptoExchange: React.FC = () => {
                 .map((ask, i) => (
                   <div
                     key={`ask-${i}-${ask.price}`}
-                    className={`grid grid-cols-12 items-center text-sm h-8 relative ${
-                      highlightedAsks[ask.price] ? "bg-sell-100 transition-colors duration-300 ease-in" : ""
+                    className={`grid grid-cols-12 items-center text-sm h-8 relative
                     }`}
                   >
                     <div
-                      className="absolute right-0 top-0 h-full bg-sell-50 opacity-20 z-0"
+                      className="absolute h-full bg-sell opacity-20 z-0"
                       style={{
-                        width: ask.size > 0 ? `${(ask.size / maxAskSize) * 100}%` : "0%",
+                        width:
+                          ask.size > 0
+                            ? `${(ask.size / totalAskSize) * 100}%`
+                            : "0%",
                       }}
                     ></div>
                     <span className="col-span-4 text-left pl-2 text-sell relative z-10">
@@ -231,14 +262,16 @@ const CryptoExchange: React.FC = () => {
               {filledBids.map((bid, i) => (
                 <div
                   key={`bid-${i}-${bid.price}`}
-                  className={`grid grid-cols-12 items-center text-sm h-8 relative ${
-                    highlightedBids[bid.price] ? "bg-buy-100 transition-colors duration-300 ease-in" : ""
+                  className={`grid grid-cols-12 items-center text-sm h-8 relative
                   }`}
                 >
                   <div
-                    className="absolute left-0 top-0 h-full bg-buy-50 opacity-20 z-0"
+                    className="absolute left-0 top-0 h-full bg-buy opacity-20 z-0"
                     style={{
-                      width: bid.size > 0 ? `${(bid.size / maxBidSize) * 100}%` : "0%",
+                      width:
+                        bid.size > 0
+                          ? `${(bid.size / totalBidSize) * 100}%`
+                          : "0%",
                     }}
                   ></div>
                   <span className="col-span-4 text-left pl-2 text-buy relative z-10">
