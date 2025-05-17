@@ -10,7 +10,7 @@ const Dropdown: React.FC<DropdownProps> = ({ options, value, onChange }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   return (
-    <div className="relative flex items-center">
+    <div className="relative flex items-center text-xs">
       <button
         type="button"
         className="w-full text-white rounded px-2 py-1 flex items-center justify-between focus:outline-none"
@@ -22,7 +22,7 @@ const Dropdown: React.FC<DropdownProps> = ({ options, value, onChange }) => {
         </svg>
       </button>
       {dropdownOpen && (
-        <div className="absolute z-10 mt-1 w-full bg-[#181C20] border border-[#2A2E33] rounded shadow-lg">
+        <div className="absolute left-0 top-full w-full min-w-[6rem] z-50 mt-1 bg-[#181C20] border border-[#2A2E33] rounded shadow-lg">
           {options.map((g) => (
             <div
               key={g}
