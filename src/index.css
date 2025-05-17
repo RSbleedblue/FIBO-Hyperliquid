@@ -9,4 +9,11 @@
   --color-sell-100: #2F272E;
   --color-buy: #60D995;
   --color-buy-100: #102F2D;
+  --color-highlight: #97FCE4;
+  --font-family: 'Inter', sans-serif;
 }
+
+body {
+  font-family: var(--font-family);
+}
+
