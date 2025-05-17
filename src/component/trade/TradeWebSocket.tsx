@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import Dropdown from "../dropdown/dropdown";
 import * as hl from "@nktkas/hyperliquid";
-
+import Skeleton from "react-loading-skeleton";
 interface TradeData {
   px: string;
   sz: string;
@@ -30,6 +30,16 @@ interface TradeEntry {
   time: number;
 }
 
+// Interface for the L2Book response from the API
+interface L2BookData {
+  coin: string;
+  time: number;
+  levels: [
+    { px: string; sz: string; n: number }[][],
+    { px: string; sz: string; n: number }[][]
+  ];
+}
+
 type TabType = "orderBook" | "trades";
 
 const CryptoExchange: React.FC = () => {
@@ -44,6 +54,7 @@ const CryptoExchange: React.FC = () => {
   const [grouping, setGrouping] = useState<number>(1);
   const [coin, setCoin] = useState<string>("BTC");
   const socketRef = useRef<WebSocket | null>(null);
+  const orderBookIntervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedAsks, setHighlightedAsks] = useState<
     Record<number, boolean>
   >({});
@@ -54,6 +65,98 @@ const CryptoExchange: React.FC = () => {
   const groupingOptions = [1, 10, 20, 50, 100, 1000, 10000];
   const coinOptions = ["BTC", "ETH", "SOL"];
   const NUM_ENTRIES = 11;
+  const POLLING_INTERVAL = 500; // 1 second interval for polling
+
+  // Process L2 Book data from the API
+  const processL2BookData = (data: any) => {
+    if (!data || !data.levels || !Array.isArray(data.levels)) {
+      console.error("Invalid L2Book data format:", data);
+      return;
+    }
+
+    setOrderBook((prevOrderBook) => {
+      const newOrderBook = {
+        bids: { ...prevOrderBook.bids },
+        asks: { ...prevOrderBook.asks },
+      };
+
+      // Process bids (first array in levels)
+      if (data.levels[0] && Array.isArray(data.levels[0])) {
+        data.levels[0].forEach((bid: { px: string; sz: string }) => {
+          const price = Math.floor(parseFloat(bid.px) / grouping) * grouping;
+          const size = parseFloat(bid.sz);
+
+          if (newOrderBook.bids[price]) {
+            const prevSize = newOrderBook.bids[price].size;
+            if (prevSize !== size) {
+              newOrderBook.bids[price].size = size;
+              setHighlightedBids((prev) => ({ ...prev, [price]: true }));
+              setTimeout(() => {
+                setHighlightedBids((prev) => {
+                  const copy = { ...prev };
+                  delete copy[price];
+                  return copy;
+                });
+              }, 700);
+            }
+          } else {
+            newOrderBook.bids[price] = {
+              price,
+              size,
+              total: 0,
+            };
+            setHighlightedBids((prev) => ({ ...prev, [price]: true }));
+            setTimeout(() => {
+              setHighlightedBids((prev) => {
+                const copy = { ...prev };
+                delete copy[price];
+                return copy;
+              });
+            }, 700);
+          }
+        });
+      }
+
+      // Process asks (second array in levels)
+      if (data.levels[1] && Array.isArray(data.levels[1])) {
+        data.levels[1].forEach((ask: { px: string; sz: string }) => {
+          const price = Math.floor(parseFloat(ask.px) / grouping) * grouping;
+          const size = parseFloat(ask.sz);
+
+          if (newOrderBook.asks[price]) {
+            const prevSize = newOrderBook.asks[price].size;
+            if (prevSize !== size) {
+              newOrderBook.asks[price].size = size;
+              setHighlightedAsks((prev) => ({ ...prev, [price]: true }));
+              setTimeout(() => {
+                setHighlightedAsks((prev) => {
+                  const copy = { ...prev };
+                  delete copy[price];
+                  return copy;
+                });
+              }, 700);
+            }
+          } else {
+            newOrderBook.asks[price] = {
+              price,
+              size,
+              total: 0,
+            };
+            setHighlightedAsks((prev) => ({ ...prev, [price]: true }));
+            setTimeout(() => {
+              setHighlightedAsks((prev) => {
+                const copy = { ...prev };
+                delete copy[price];
+                return copy;
+              });
+            }, 700);
+          }
+        });
+      }
+
+      return newOrderBook;
+    });
+  };
 
   // Process incoming trade data and update the order book
   const processTradeData = (tradeData: TradeData[]) => {
@@ -262,28 +365,46 @@ const CryptoExchange: React.FC = () => {
     return { value: 0, percentage: "0.000" };
   }, [filledAsks, filledBids]);
 
+  // Set up periodic polling for order book data
+  const startOrderBookPolling = () => {
+    if (orderBookIntervalRef.current) {
+      clearInterval(orderBookIntervalRef.current);
+    }
+
+    // Reset order book
+    setOrderBook({ bids: {}, asks: {} });
+
+    // Initial fetch
+    fetchL2Book();
+
+    // Set up periodic polling
+    orderBookIntervalRef.current = setInterval(fetchL2Book, POLLING_INTERVAL);
+  };
+
+  // Fetch L2 book data from API
+  const fetchL2Book = async () => {
+    try {
+      const l2Book = await client.l2Book({ coin: coin });
+      processL2BookData(l2Book);
+    } catch (err) {
+      console.error("Error fetching L2 book:", err);
+      setError("Error fetching order book data");
+    }
+  };
+
   // Reset order book when grouping changes
   useEffect(() => {
     setOrderBook({ bids: {}, asks: {} });
   }, [grouping]);
 
-  useEffect(() => {
-    const fetchL2Book = async () => {
-      const l2Book = await client.l2Book({ coin: coin });
-      console.log(l2Book);
-    };
-    fetchL2Book();
-  }, []);
-
+  // Connect to WebSocket for trade data
   const connectWebSocket = () => {
     if (socketRef.current) {
       socketRef.current.close();
     }
 
     // Reset data
-    if (activeTab === "orderBook") {
-      setOrderBook({ bids: {}, asks: {} });
-    } else {
+    if (activeTab === "trades") {
       setTrades([]);
     }
 
@@ -294,13 +415,11 @@ const CryptoExchange: React.FC = () => {
       setIsConnected(true);
       setError(null);
 
-      // Determine subscription type based on active tab
-      const subscriptionType = activeTab === "orderBook" ? "l2Book" : "trades";
-
+      // Subscribe to trades data
       socket.send(
         JSON.stringify({
           method: "subscribe",
-          subscription: { type: subscriptionType, coin: coin },
+          subscription: { type: "trades", coin: coin },
         })
       );
     };
@@ -309,7 +428,6 @@ const CryptoExchange: React.FC = () => {
       try {
         const response = JSON.parse(event.data);
         if (Array.isArray(response.data)) {
-          console.log(response.data);
           processTradeData(response.data);
         }
         if (response.error) setError(response.error);
@@ -332,6 +450,7 @@ const CryptoExchange: React.FC = () => {
     return date.toTimeString().split(" ")[0];
   };
 
+  // Effect for connecting to WebSocket
   useEffect(() => {
     connectWebSocket();
     return () => {
@@ -339,7 +458,25 @@ const CryptoExchange: React.FC = () => {
         socketRef.current.close();
       }
     };
-  }, [coin, activeTab]);
+  }, [coin]);
+
+  // Effect for order book polling
+  useEffect(() => {
+    if (activeTab === "orderBook") {
+      startOrderBookPolling();
+    } else {
+      // Clear polling when not on orderBook tab
+      if (orderBookIntervalRef.current) {
+        clearInterval(orderBookIntervalRef.current);
+      }
+    }
+
+    return () => {
+      if (orderBookIntervalRef.current) {
+        clearInterval(orderBookIntervalRef.current);
+      }
+    };
+  }, [activeTab, coin, grouping]);
 
   return (
     <div className="bg-primary text-white p-4 rounded-lg w-[18%] max-w-lg">
@@ -378,9 +515,6 @@ const CryptoExchange: React.FC = () => {
             />
             <Dropdown options={coinOptions} value={coin} onChange={setCoin} />
           </>
-        )}
-        {activeTab === "trades" && (
-          <Dropdown options={coinOptions} value={coin} onChange={setCoin} />
         )}
       </div>
 
@@ -508,7 +642,7 @@ const CryptoExchange: React.FC = () => {
             ))}
             {trades.length === 0 && (
               <div className="text-center text-gray-400 py-4">
-                Waiting for trades...
+                <Skeleton className="w-full h-4" />
               </div>
             )}
           </div>
